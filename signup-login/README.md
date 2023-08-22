@@ -1,4 +1,3 @@
-#ABOUT
 Ensuring the security🔒 of user👤 data is paramount, leading me to implement robust measures in the code.
 Passwords are both hashed👻🔒 and encrypted, bolstering the defense of sensitive information.
 While actions require password access, I've introduced a decryption mechanism for smooth user interactions.
