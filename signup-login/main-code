@@ -1,0 +1,174 @@
+import pymysql
+import bcrypt
+import datetime
+import getpass
+
+# Establishing connection to the main database
+conn = pymysql.connect(host='127.0.0.1', user='mhmd', password='mhmd0150225415', db='user')
+cursor = conn.cursor()
+
+def create_table(cursor):
+    cursor.execute('''CREATE TABLE IF NOT EXISTS users
+                      (id INT AUTO_INCREMENT PRIMARY KEY,
+                       user_name VARCHAR(255) NOT NULL UNIQUE,
+                       email VARCHAR(300) NOT NULL,
+                       password VARCHAR(255) NOT NULL,
+                       last_login_attempt DATETIME,
+                       login_attempts INT)''')
+
+def signup(cursor):
+    while True:
+        user_name = input("Enter your username: ")
+        e_mail = input("Enter your email: ")
+
+        if "@" not in e_mail:
+            print("Invalid email format. Please enter a valid email or enter '0' to go back.")
+            choice = input("Enter '0' to go back or any key to continue: ")
+            if choice == '0':
+                return
+            else:
+                continue
+
+        while True:
+            passw = getpass.getpass("Enter your password (at least 8 characters): ")
+            if len(passw) < 8:
+                print("Password should be at least 8 characters long.")
+                continue
+            passw_confirm = getpass.getpass("Confirm your password: ")
+            if passw == passw_confirm:
+                break
+            else:
+                print("Passwords do not match. Please try again.")
+
+        # Hash the password
+        hashed_password = bcrypt.hashpw(passw.encode('utf-8'), bcrypt.gensalt())
+
+        # Check if the username or email already exists in the database
+        cursor.execute("SELECT user_name, email FROM users WHERE user_name=%s OR email=%s", (user_name, e_mail))
+        result = cursor.fetchone()
+        if result:
+            print("Error: Username or email already exists")
+        else:
+            cursor.execute('''INSERT INTO users (user_name, email, password, last_login_attempt, login_attempts)
+                              VALUES (%s, %s, %s, NULL, 0)''', (user_name, e_mail, hashed_password))
+            conn.commit()
+            print("Signup was successful")
+            break
+def login(cursor):
+    l_user_name = input("Enter your username: ")
+    l_passw = getpass.getpass("Enter your password: ")
+    
+    # Get user's last login attempt and login attempts count
+    cursor.execute("SELECT password, last_login_attempt, login_attempts FROM users WHERE user_name=%s", l_user_name)
+    result = cursor.fetchone()
+    
+    if result:
+        hashed_password = result[0]
+        last_attempt = result[1]
+        login_attempts = result[2]
+        
+        # Check if there is a previous login attempt within the last hour
+        if last_attempt and (datetime.datetime.now() - last_attempt).total_seconds() < 3600:
+            if login_attempts >= 5:
+                print("Too many login attempts. Please try again later.")
+                return None
+        else:
+            # Reset login attempts count if more than an hour has passed
+            login_attempts = 0
+        
+        if bcrypt.checkpw(l_passw.encode('utf-8'), hashed_password.encode('utf-8')):
+            print("Login successful")
+            return l_user_name
+        else:
+            print("Incorrect username or password")
+            login_attempts += 1
+            cursor.execute("UPDATE users SET last_login_attempt=NOW(), login_attempts=%s WHERE user_name=%s", (login_attempts, l_user_name))
+            conn.commit()
+            return None
+    else:
+        print("User not found.")
+        return None
+
+def change_password(cursor, username):
+    current_password = input("Enter your current password: ")
+    cursor.execute("SELECT password FROM users WHERE user_name=%s", username)
+    result = cursor.fetchone()
+    if result and bcrypt.checkpw(current_password.encode('utf-8'), result[0].encode('utf-8')):
+        new_password = getpass.getpass("Enter your new password: ")
+        new_password2 = getpass.getpass("Enter new password again: ")
+        if new_password == new_password2:
+            # Hash the new password
+            hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
+            cursor.execute("UPDATE users SET password=%s WHERE user_name=%s", (hashed_password, username))
+            conn.commit()
+            print("Password changed successfully")
+        else:
+            print("Passwords do not match. Password change failed")
+    else:
+        print("Incorrect password. Password change failed")
+def mask_email(email):
+    parts = email.split('@')
+    username = parts[0]
+    domain = parts[1]
+    masked_username = username[:3] + '*' * (len(username) - 5) + username[-2:]
+    return f"{masked_username}@{domain}"
+
+def forgot_password(cursor, username):
+    cursor.execute("SELECT email FROM users WHERE user_name=%s", username)
+    result = cursor.fetchone()
+    if result:
+        actual_email = result[0]
+        masked_email = mask_email(actual_email)
+        email_input = input(f"Enter the email you signed up with ({masked_email}): ")
+        if email_input == actual_email:
+            new_password = getpass.getpass("Enter your new password: ")
+            new_password2 = getpass.getpass("Enter new password again: ")
+            if new_password == new_password2:
+                # Hash the new password
+                hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
+                cursor.execute("UPDATE users SET password=%s WHERE user_name=%s", (hashed_password, username))
+                conn.commit()
+                print("Password reset successfully")
+            else:
+                print("Passwords do not match. Password reset failed")
+        else:
+            print("Incorrect email. Password reset failed.")
+    else:
+        print("User not found.")
+if __name__ == '__main__':
+    create_table(cursor)
+    
+    while True:
+        r = input("Login by entering 0 or signup by entering 1. Enter 'f' for forgot password or 'exit' to quit: ")
+        
+        if r == "0":
+            logged_in_user = login(cursor)
+            if logged_in_user:
+                while True:
+                    print("Menu:")
+                    print("1. Change Password")
+                    print("2. Forgot Password")
+                    print("3. Logout")
+                    choice = input("Enter your choice: ")
+                    
+                    if choice == "1":
+                        change_password(cursor, logged_in_user)
+                    elif choice == "2":
+                        forgot_password(cursor, logged_in_user)
+                    elif choice == "3":
+                        print("Logging out...")
+                        break
+                    else:
+                        print("Invalid choice. Please choose again.")
+        elif r == "1":
+            signup(cursor)
+        elif r.lower() == "f":
+            username = input("Enter your username: ")
+            forgot_password(cursor, username)
+        elif r.lower() == "exit":
+            print("Goodbye!")
+            break
+        else:
+            print("Invalid input")
+
+    conn.close()
