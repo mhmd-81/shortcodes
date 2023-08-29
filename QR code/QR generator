@@ -1,0 +1,16 @@
+import pyqrcode
+import os,shutil 
+
+title = input("give your QR code a title:\n")
+text = input("what  would you like the Qr code to be?\n")
+
+file_name_svg = title + ".svg"
+file_name_png = title + ".png"
+
+url = pyqrcode.create(text)
+
+url.svg(file_name_svg, scale = 8)
+url.png(file_name_png , scale = 10)
+os.mkdir(fr"C:\Users\mhmd\Desktop\{title}")
+shutil.move(file_name_png,fr"C:\Users\mhmd\Desktop\{title}")
+shutil.move(file_name_svg, fr"C:\Users\mhmd\Desktop\{title}")
