@@ -1,0 +1,1 @@
+Frequently, there's a need to create QR codes for your various text-based content, such as project links or certifications. This code empowers you to generate your inaugural QR code, with room for ongoing refinements over time.
